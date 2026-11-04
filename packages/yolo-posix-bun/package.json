@@ -1,7 +1,15 @@
 {
-  "name": "@yolo/posix-bun",
+  "name": "@yolo-rs/posix-bun",
   "version": "0.1.0",
   "description": "Integrated POSIX.1-2024 and GNU compatibility helpers for Bun",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yolo-rs/yolo-zig.git",
+    "directory": "packages/yolo-posix-bun"
+  },
+  "homepage": "https://github.com/yolo-rs/yolo-zig/tree/main/packages/yolo-posix-bun",
+  "bugs": "https://github.com/yolo-rs/yolo-zig/issues",
+  "files": ["src", "LICENSE", "NOTICE.md", "README.md"],
   "license": "Apache-2.0",
   "type": "module",
   "main": "./src/index.ts",
