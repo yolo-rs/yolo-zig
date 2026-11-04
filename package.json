@@ -1,0 +1,19 @@
+{
+  "name": "@yolo/zig-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "bun@1.4.4-canary.1",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "zig:build": "bun tools/yolo-zig.ts build root",
+    "zig:format": "zig fmt --check build.zig apps libs",
+    "yolo-zig": "bun tools/yolo-zig.ts",
+    "doctor": "bun tools/yolo-zig.ts doctor",
+    "inspect:windows": "bun tools/yolo-zig.ts inspect windows",
+    "rust-ffi:windows-msvc": "bun tools/yolo-zig.ts build rust-ffi-windows-msvc",
+    "rust-ffi:windows-gnu": "bun tools/yolo-zig.ts build rust-ffi-windows-gnu",
+    "rust-ffi:linux": "bun tools/yolo-zig.ts build rust-ffi-linux",
+    "forks:status": "bun tools/yolo-zig.ts forks status",
+    "help": "bun tools/yolo-zig.ts help"
+  }
+}

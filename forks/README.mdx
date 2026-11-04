@@ -1,0 +1,35 @@
+# Upstream source forks
+
+These are complete upstream Git repositories tracked as Git submodules. Each keeps its own complete Git history, upstream build files, documentation, notices, and license. The top-level repository pins exact upstream commits; it does not flatten or rewrite their histories.
+
+Initialize all checkouts and upstream-declared submodules with:
+
+```powershell
+git submodule update --init --recursive
+```
+
+Use the upstream toolchain/build instructions inside each checkout. This workspace does not pretend these projects share one Zig version or build graph. `bun run zig:build` builds the root CLI/ABI and integrates the upstream `bsdiff`/`bspatch` commands. Run other upstream projects on native CI hosts or WSL where their prerequisites are available.
+
+To review upstream updates without silently changing the pinned workspace:
+
+```powershell
+git submodule foreach --recursive 'git status --short --branch'
+git submodule update --remote --merge
+git diff --submodule=log
+```
+
+Review each changed commit, license, Zig pin, platform matrix, transitive submodules, and CI/build instructions before committing updated gitlinks. Keep local patches as separate patch files or commits on a YOLO-owned fork; do not edit an upstream checkout and lose its provenance.
+
+## Selected source trees
+
+| Path | Upstream | Workspace role | Platform boundary |
+| --- | --- | --- | --- |
+| `lightpanda-browser` | [lightpanda-io/browser](https://github.com/lightpanda-io/browser) | Independent headless/CDP engine and browser benchmark | Linux first; Windows use is via WSL2, not a native Windows engine. AGPL-3.0-only. No graphical layout/rendering engine. |
+| `electrobun` | [blackboardsh/electrobun](https://github.com/blackboardsh/electrobun) | Full Bun + Zig + C/C++ desktop bridge, packaging and updater reference | Windows 11 and Linux supported on native build hosts; native applications do not cross-compile. MIT. |
+| `vercel-native` | [vercel-labs/native](https://github.com/vercel-labs/native) | Experimental Zig/native desktop SDK source, Windows WebView2 host, and CEF packaging reference | Upstream has Windows x64 native app/runtime paths and Windows x64/arm64 release assets; keep it experimental and independent from the Bun-owned workspace CLI. Apache-2.0. |
+| `vercel-fx` | [vercel-labs/fx](https://github.com/vercel-labs/fx) | Zig AI coding agent and terminal automation source | Upstream is macOS/Linux; Windows builds a Linux x86_64 binary and launches it through WSL2 because the interactive terminal and process host use POSIX APIs. Apache-2.0. |
+| `zig-bsdiff` | [blackboardsh/zig-bsdiff](https://github.com/blackboardsh/zig-bsdiff) | Candidate binary-delta engine for signed OS/browser updates | Benchmark on Windows/Linux and integrate only with an authenticated, rollback-safe updater. MIT. Has an upstream Zstandard submodule. |
+
+The repos above are complete source checkouts with pinned upstream heads. `zig-bsdiff` is wired into the root build: its Zig patch tools compile against the pinned upstream Zstandard and libsais C sources, producing `zig-out/bin/bsdiff` and `zig-out/bin/bspatch` for the selected target. Keep each upstream's license and dependency notices. Lightpanda remains an optional Linux browser role; Electrobun and Vercel Native do not replace Chromium Views/WebUI/Skia. The Awesome Zig catalog is discovery input, not a blanket import list.
+
+The Bun command dispatcher also exposes the built Vercel `fx` binary as `agent fx`, the built Lightpanda checkout as `browser lightpanda` (through WSL on Windows), and the Electrobun checkout's Hutch CLI as `desktop electrobun`. Build `fx` or Lightpanda with `bun tools/yolo-zig.ts build <fx|lightpanda>` on a supported host, or build the Vercel Native SDK Windows x64 CLI and WebView2 desktop example with `bun tools/yolo-zig.ts build <native-windows-x64|native-windows-desktop>`. Both Windows targets use the upstream-pinned Zig 0.16.0 toolchain. These launchers preserve upstream processes and arguments; they do not wrap the browser protocol or rewrite either application.

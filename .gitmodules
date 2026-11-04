@@ -1,0 +1,23 @@
+[submodule "forks/vercel-native"]
+	path = forks/vercel-native
+	url = https://github.com/vercel-labs/native.git
+	branch = main
+[submodule "forks/lightpanda-browser"]
+	path = forks/lightpanda-browser
+	url = https://github.com/lightpanda-io/browser.git
+	branch = main
+[submodule "forks/electrobun"]
+	path = forks/electrobun
+	url = https://github.com/blackboardsh/electrobun.git
+	branch = main
+[submodule "forks/vercel-fx"]
+	path = forks/vercel-fx
+	url = https://github.com/vercel-labs/fx.git
+	branch = main
+[submodule "forks/zig-bsdiff"]
+	path = forks/zig-bsdiff
+	url = https://github.com/blackboardsh/zig-bsdiff.git
+	branch = main
+[submodule "forks/libsais"]
+	path = forks/libsais
+	url = https://github.com/IlyaGrebnov/libsais.git

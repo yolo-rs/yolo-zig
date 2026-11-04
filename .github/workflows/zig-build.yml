@@ -1,0 +1,122 @@
+name: Zig build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      accept_microsoft_sdk_license:
+        description: Accept the Microsoft CRT/Windows SDK license for the cargo-xwin cross-build
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / Zig ${{ matrix.zig }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        zig: ["0.17.1", "0.18.0-dev.852+efa5bfa9b"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: ${{ matrix.zig }}
+          cache-key: ${{ matrix.zig }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4-canary.1
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Build integrated workspace and apply pinned upstream patches
+        run: bun tools/yolo-zig.ts build root -Dcpu=baseline
+      - name: Format check
+        run: zig fmt --check build.zig apps libs forks/zig-bsdiff/bspatch.zig
+      - name: Build native targets
+        run: zig build --summary all -Dcpu=baseline
+      - name: Run target diagnostic
+        run: zig build run -- host --json
+      - name: Bun FFI consumer
+        run: bun examples/bun-ffi.ts
+      - name: Build C++ FFI consumer
+        run: zig c++ examples/cpp-ffi.cpp -I include -L zig-out/lib -lyolo_zig -o zig-out/bin/yolo-zig-ffi-cpp
+      - name: Run C++ FFI consumer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = "$PWD/zig-out/bin;$env:PATH"
+          .\zig-out\bin\yolo-zig-ffi-cpp.exe
+      - name: Run C++ FFI consumer (Linux)
+        if: runner.os == 'Linux'
+        run: LD_LIBRARY_PATH=zig-out/lib ./zig-out/bin/yolo-zig-ffi-cpp
+      - name: Rust FFI consumer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:YOLO_ZIG_LIB_DIR = (Resolve-Path zig-out/lib).Path
+          $env:PATH = "$PWD/zig-out/bin;$env:PATH"
+          cargo run --manifest-path examples/rust-ffi/Cargo.toml
+      - name: Rust FFI consumer (Linux)
+        if: runner.os == 'Linux'
+        run: YOLO_ZIG_LIB_DIR=zig-out/lib LD_LIBRARY_PATH=zig-out/lib cargo run --manifest-path examples/rust-ffi/Cargo.toml
+      - name: Cross build Windows GNU
+        run: zig build --prefix zig-out/x86_64-windows-gnu -Dtarget=x86_64-windows-gnu -Doptimize=ReleaseFast -Dcpu=baseline --summary all
+      - name: Cross build Linux GNU
+        run: zig build --prefix zig-out/x86_64-linux-gnu '-Dtarget=x86_64-linux-gnu.2.35' -Doptimize=ReleaseFast -Dcpu=baseline --summary all
+      - name: Cargo cross build Windows GNU through cargo-zigbuild
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo install --locked cargo-zigbuild
+          bun run rust-ffi:windows-gnu
+      - name: Cargo cross build Linux glibc through cargo-zigbuild
+        if: runner.os == 'Linux'
+        run: |
+          cargo install --locked cargo-zigbuild
+          bun run rust-ffi:linux
+      - name: Build fx for native Linux or Windows WSL
+        run: bun tools/yolo-zig.ts build fx
+
+  cargo-xwin:
+    if: github.event_name == 'workflow_dispatch' && inputs.accept_microsoft_sdk_license
+    name: Cargo Windows MSVC cross-build via xwin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.17.1"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4-canary.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Install cargo-xwin
+        run: cargo install --locked cargo-xwin
+      - name: Build Zig ABI and Rust FFI consumer with cargo-xwin
+        run: bun tools/yolo-zig.ts build rust-ffi-windows-xwin --accept-ms-license
+
+  vercel-native-windows:
+    name: Vercel Native SDK Windows x64 CLI
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.16.0"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4-canary.1
+      - name: Build the upstream Windows CLI with the upstream Zig toolchain
+        run: bun tools/yolo-zig.ts build native-windows-x64
+      - name: Build the upstream WebView2 desktop app on Windows
+        run: bun tools/yolo-zig.ts build native-windows-desktop

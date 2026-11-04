@@ -1,0 +1,105 @@
+# yolo-zig
+
+`yolo-zig` is the standalone Zig monorepo and native support layer for YOLO's AI-oriented OS. Its role is to produce small, portable OS utilities and stable C ABI libraries that the Rust `yolo`, Bun, and Chromium C++ layers can call where Zig is a measurable fit. It does not embed or replace a browser engine, Rust workspace, Bun runtime, or Chromium GN build.
+
+The root workspace builds a Zig target-diagnostic CLI, a versioned C ABI library, and the full upstream `bsdiff`/`bspatch` command pair. The delta implementation compiles from the pinned Zig fork and its C sources, giving the Windows/Linux build graph a real upstream integration.
+
+## Build
+
+The package declares Zig 0.17.0 compatibility and selects the canary `0.18.0-dev.852+efa5bfa9b` through [`anyzig`](https://github.com/marler8997/anyzig), which resolves the project toolchain from `build.zig.zon`. The compiler release and canary can coexist without replacing the system Zig. Keep [ZLS](https://github.com/zigtools/zls) matched to the selected compiler; use the companion `anyzls` binary for the canary lane. Zig's own compiler includes `zig build`, `zig test`, `zig fmt`, `zig cc`, and `zig c++`; `build.zig.zon` is the package/dependency manifest and keeps dependencies hash-pinned.
+
+The Bun workspace integrates `yolo-posix-bun` source from `yolo-standards` as `packages/yolo-posix-bun` (Apache-2.0); the fork inventory command uses its GNU-style option parser. Bun OS patterns are applied at the OS boundary: discover executables with `Bun.which`, launch argument arrays with `Bun.spawn`, and report platform capability instead of assuming Unix command behavior.
+
+```powershell
+zig version
+bun run zig:build
+zig build run -- host --json
+bun tools/yolo-zig.ts build root -Doptimize=ReleaseFast -Dcpu=baseline
+zig fmt build.zig apps libs
+```
+
+The workspace command applies the checked-in Zig 0.18 compatibility patch before compiling. A project toolchain wrapper can resolve the compiler pin from `build.zig.zon`; set `YOLO_ZIG_COMPILER` to select a specific stable or nightly compiler without changing global configuration.
+
+Cross-compile the target-specific CLI, shared library, and header from the same build graph. Keep target artifacts in separate prefixes so Windows MSVC/GNU libraries do not overwrite each other:
+
+```powershell
+bun tools/yolo-zig.ts build root --prefix zig-out/x86_64-windows-msvc -Dtarget=x86_64-windows-msvc -Doptimize=ReleaseFast -Dcpu=baseline
+bun tools/yolo-zig.ts build root --prefix zig-out/x86_64-windows-gnu -Dtarget=x86_64-windows-gnu -Doptimize=ReleaseFast -Dcpu=baseline
+bun tools/yolo-zig.ts build root --prefix zig-out/x86_64-linux-gnu '-Dtarget=x86_64-linux-gnu.2.35' -Doptimize=ReleaseFast -Dcpu=baseline
+```
+
+The default install prefix is `zig-out/`; override it with Zig's `--prefix` option. Build outputs and caches are ignored by Git. `include/yolo_zig.h` is the stable native boundary for C and C++ callers; Rust and Bun integrations should wrap this ABI only when a concrete feature consumes it. Increment the ABI version when changing exported behavior or signatures.
+
+## Complete upstream source forks
+
+The repository includes full upstream checkouts as pinned Git submodules under [`forks/`](forks/README.mdx). They preserve upstream Git history and build systems. Clone with submodules or initialize them after checkout:
+
+```powershell
+git clone --recurse-submodules <yolo-zig-repository>
+git submodule update --init --recursive
+```
+
+Selected complete source trees are Lightpanda, Electrobun, Vercel Native, Vercel fx, and zig-bsdiff. Their platform support and licenses differ; see [fork roles and integration boundaries](forks/README.mdx). The root build compiles the actual `bsdiff` and `bspatch` entry points with pinned Zstandard and libsais sources into `zig-out/bin`. Use `bun run yolo-zig delta create <old> <new> <patch>` to create a Zstandard TRDIFF10 update patch, then `bun run yolo-zig delta apply <old> <output> <patch>` to apply it. Patch application assumes the caller authenticated the patch and controls its input/output paths; the Rust service retains signature checks, authorization, rollback policy, and update orchestration. Gitlinks pin exact reviewed commits; update them deliberately with `git submodule update --remote --merge` and review the resulting source diff before accepting the new pins.
+
+The same Bun dispatcher provides `agent fx`, `browser lightpanda`, and `desktop electrobun <hutch args...>` entry points that forward arguments and process I/O to the upstream binaries. Build `fx` with `bun tools/yolo-zig.ts build fx`; on Windows this cross-compiles its Linux binary for WSL. Build Lightpanda with `bun tools/yolo-zig.ts build lightpanda`; on Windows this delegates its Linux build to WSL. The dispatcher resolves the checkout's Windows path with `wslpath` before launching either Linux program, so it works from a non-default WSL working directory. A WSL2 distribution must be installed and initialized, and the checkout must be accessible under `/mnt/<drive>/...`. Build the pinned Vercel Native SDK Windows x64 CLI or the native WebView2 desktop sample with `bun tools/yolo-zig.ts build native-windows-x64` or `bun tools/yolo-zig.ts build native-windows-desktop`; both use its upstream Zig 0.16.0 toolchain, selected by `YOLO_NATIVE_ZIG_COMPILER`, `YOLO_ZIG_COMPILER`, or the Aphrody Zig cache. Electrobun apps remain native Windows 11 builds through Hutch.
+
+Run `bun tools/yolo-zig.ts doctor` to inspect host tools and platform routes. Use `bun tools/yolo-zig.ts forks status --json` for machine-readable submodule revisions and worktree state. `buncc`, `cargo-zigbuild`, and `cargo-xwin` are detected when installed, but remain optional because the root Zig graph cross-compiles its own Zig/C targets.
+
+On Windows, `bun run inspect:windows` dynamically registers Bun OS's `@aphrody/windows` plugin and uses its `bun:windows` module for host/process inventory. It uses WinClean's read-only memory, disk, and WSL-service queries; it never changes services or terminates processes. Point `YOLO_BUN_OS_ROOT` at the Bun OS checkout when it is not a sibling directory. `bun tools/yolo-zig.ts build rust-ffi-windows` builds the Zig MSVC ABI library and then invokes Bun OS Buncc to prepare Visual Studio's MSVC environment and build the Rust FFI example for `x86_64-pc-windows-msvc`.
+
+## Cargo cross-build lanes
+
+Each Rust FFI lane first builds the matching Zig shared library/import library, then compiles the Rust consumer against that artifact. Buncc runs Cargo with its host-aware environment, cache, and concurrency management when available; standalone clones fall back to Cargo directly.
+
+| Command | Host | Rust target | Toolchain path |
+| --- | --- | --- | --- |
+| `bun run rust-ffi:windows-msvc` | Windows | `x86_64-pc-windows-msvc` | Buncc enters Visual Studio/MSVC |
+| `bun run rust-ffi:windows-gnu` | Windows, Linux, or macOS | `x86_64-pc-windows-gnu` | `cargo-zigbuild` and Zig linker |
+| `bun run rust-ffi:linux` | Linux or macOS | `x86_64-unknown-linux-gnu.2.35` | `cargo-zigbuild` and Zig linker |
+| `bun tools/yolo-zig.ts build rust-ffi-windows-xwin --accept-ms-license` | Linux or macOS | `x86_64-pc-windows-msvc` | `cargo-xwin`, clang/LLVM and xwin SDK |
+
+`cargo-zigbuild` is used for GNU targets and glibc-versioned Linux builds. Upstream documents Linux/macOS target support and its glibc-version caveats; a Windows-host attempt to link the Linux FFI artifact failed on Windows path handling/LLD, so this workspace routes Linux Rust builds to Linux/macOS hosts. `cargo-xwin` is the MSVC cross-build lane from Linux/macOS. The explicit `--accept-ms-license` argument gates downloading Microsoft's CRT/SDK; the manual GitHub workflow exposes the same consent as an unchecked dispatch input. The ordinary CI matrix builds the Windows GNU and Linux Rust lanes on their supported hosts.
+
+Zig Build remains the cross compiler for Zig and C sources in this workspace. Buncc adds Windows SDK/MSVC environment management for Rust/Cargo integrations; it does not replace Zig's target graph. Bun OS's `buncc doctor --repo` also checks Bun OS's own generated catalogs and source pins, so its repository audit can report Bun OS maintenance issues unrelated to this workspace.
+
+## FFI examples
+
+The examples call the same ABI from Bun FFI, Rust `extern "C"`, and C++ using the public header:
+
+```powershell
+bun examples/bun-ffi.ts
+zig c++ examples/cpp-ffi.cpp -I include -L zig-out/lib -lyolo_zig -o zig-out/bin/yolo-zig-ffi-cpp.exe
+$env:YOLO_ZIG_LIB_DIR = (Resolve-Path zig-out/lib).Path
+$env:PATH = (Resolve-Path zig-out/bin).Path + ";" + $env:PATH
+cargo run --manifest-path examples/rust-ffi/Cargo.toml
+```
+
+On Linux, set both `YOLO_ZIG_LIB_DIR=zig-out/lib` and `LD_LIBRARY_PATH=zig-out/lib` when running the Rust example. Bun's FFI remains experimental; the example is an ABI compatibility probe, not a recommendation to place high-privilege OS operations behind direct JavaScript FFI.
+
+## Language boundaries
+
+| Layer | Owns | Zig's contribution |
+| --- | --- | --- |
+| Rust | Browser control, services, policy, engine integration | Call a narrow C ABI only for measured native hot paths or portable native utilities |
+| Bun | CLI orchestration, MCP, scripts, package management | Spawn `yolo-zig` for native work; do not reproduce Rust's product command tree |
+| Chromium C++ | Browser process, Blink, Views, WebUI, Skia, GN/Ninja build | Consume selected C ABI libraries; Chromium and depot_tools keep their upstream build graph |
+| Zig | Standalone native tools and C ABI libraries | Cross-platform C/C++ compilation, small native utilities, and independently benchmarked packaging components |
+
+Never use Zig as a second Chromium build system. Chromium source and dependencies remain governed by `DEPS`, GN, and depot_tools. Keep Zig source, artifacts, caches, and its lockfile in this standalone project, not in the YOLO-Web repository.
+
+## Upstream landscape reviewed
+
+| Project | License/status | Fit |
+| --- | --- | --- |
+| [Zig compiler and standard library](https://codeberg.org/ziglang/zig) and [official downloads](https://ziglang.org/download/) | MIT; compiler project moved from GitHub to Codeberg | Use official version-specific build, language, and standard-library docs. At review time the download page listed stable 0.17.1 and master 0.18.0-dev.852. This repo builds with that pinned master and keeps 0.17.0 as its declared compatibility floor. |
+| [anyzig](https://github.com/marler8997/anyzig) and [anyzig releases](https://github.com/marler8997/anyzig/releases/latest) | MIT; active release v2026_11_03 includes Windows/Linux wrappers | Resolve a project-selected stable/nightly compiler from `build.zig.zon` and keep multiple toolchains without changing the global Zig installation. The project canary was fetched and built through anyzig on this host. |
+| [ZLS](https://github.com/zigtools/zls) and [ZLS releases](https://zigtools.org/zls/releases/) | Zig community language server; versioned with Zig | Use the matching ZLS release; the 0.17 series has documented build-protocol regressions. The current project canary should use the anyzls resolver rather than pin a mismatched stable LSP. |
+| [Lightpanda Browser](https://github.com/lightpanda-io/browser) | AGPL-3.0; active headless Zig browser | Complete source is pinned at `forks/lightpanda-browser`; keep as a Linux-first headless/CDP engine. Windows runs via WSL, and the engine does not provide a GUI rendering stack. |
+| [Vercel Native SDK](https://github.com/vercel-labs/native) | Apache-2.0; experimental native app toolkit | Complete source is pinned at `forks/vercel-native`, including a native Windows WebView2 host and Windows x64/arm64 release targets. Study its `std.Build` graphs and CEF packaging while keeping its TypeScript/Node tooling and alternate UI isolated from the Bun workspace and Chromium Views. |
+| [Vercel fx](https://github.com/vercel-labs/fx) | Apache-2.0; Zig AI coding-agent source | Complete source is pinned at `forks/vercel-fx`; audit target support and toolchain compatibility before product integration. |
+| [Electrobun](https://github.com/blackboardsh/electrobun) | MIT; Bun + Zig + C/C++ desktop framework | Complete source is pinned at `forks/electrobun`; study its native bridge, updater and packaging. Native host builds support Windows/Linux, but do not cross-compile; its Zig UI is experimental and macOS-only. |
+| [Blackboard zig-bsdiff](https://github.com/blackboardsh/zig-bsdiff) | MIT; Zig binary delta/patch utility | Complete source is pinned at `forks/zig-bsdiff` with its Zstandard submodule. Benchmark signed update bundles and integrity/rollback behavior before integration. |
+| [Blackboard zig-zstd](https://github.com/blackboardsh/zig-zstd) and [zig-asar](https://github.com/blackboardsh/zig-asar) | MIT; focused utilities | Evaluate only for package workflows that need their exact functionality; avoid adding a second zstd or archive stack without a measured benefit. |
+| [Vercel setup-zig](https://github.com/vercel-labs/setup-zig) | GitHub Action | Reference only: its current default is Zig 0.16.0, so CI must specify an explicit compatible version rather than inherit that default. |
+
+The selected trees are full-history Git submodules pinned to upstream commits; the remaining entries are references. Use `bun run forks:status` to inspect the checked-out revisions, then follow each fork's own build instructions on supported native hosts. The toolchain design follows the [official Zig build-system guide](https://ziglang.org/learn/build-system/) and [getting-started guidance](https://ziglang.org/learn/getting-started/). Use tagged toolchains for reproducible releases; isolate master/nightly builds in an explicit experimental CI lane.
