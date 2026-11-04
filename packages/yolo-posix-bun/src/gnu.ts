@@ -34,12 +34,12 @@ export function getoptLong(
   let i = 0;
 
   while (i < args.length) {
-    const arg = args[i];
+    const arg = args[i]!;
 
     if (arg === "--") {
       i++;
       while (i < args.length) {
-        results.push({ type: "non-opt", val: args[i] });
+        results.push({ type: "non-opt", val: arg });
         i++;
       }
       break;
@@ -66,7 +66,7 @@ export function getoptLong(
         if (inlineVal !== undefined) {
           results.push({ type: "opt", val: opt.val, arg: inlineVal });
         } else if (i < args.length) {
-          results.push({ type: "opt", val: opt.val, arg: args[i] });
+          results.push({ type: "opt", val: opt.val, arg: args[i]! });
           i++;
         } else {
           results.push({ type: "missing-arg", char: name });
@@ -79,7 +79,7 @@ export function getoptLong(
 
     // Short option
     if (arg.startsWith("-") && arg.length > 1 && arg !== "-") {
-      const optChar = arg[1];
+      const optChar = arg[1]!;
       const pos = optstring.indexOf(optChar);
 
       if (pos === -1) {
@@ -97,7 +97,7 @@ export function getoptLong(
           results.push({ type: "opt", val: optChar, arg: arg.slice(2) });
           i++;
         } else if (i + 1 < args.length) {
-          results.push({ type: "opt", val: optChar, arg: args[i + 1] });
+          results.push({ type: "opt", val: optChar, arg: args[i + 1]! });
           i += 2;
         } else {
           results.push({ type: "missing-arg", char: optChar });

@@ -49,6 +49,8 @@ On Windows, `bun run inspect:windows` dynamically registers Bun OS's `@aphrody/w
 
 ## Cargo cross-build lanes
 
+The stable Rust ABI wrapper is published as [`yolo-zig-ffi`](https://crates.io/crates/yolo-zig-ffi). Add it with `cargo add yolo-zig-ffi --features link-yolo-zig`, then build the matching shared library and set `YOLO_ZIG_LIB_DIR`. The feature is opt-in because Rust consumers must ship the target-matched Zig DLL/SO with their application. The Rust example below exercises the published wrapper against the actual Windows MSVC library.
+
 Each Rust FFI lane first builds the matching Zig shared library/import library, then compiles the Rust consumer against that artifact. Buncc runs Cargo with its host-aware environment, cache, and concurrency management when available; standalone clones fall back to Cargo directly.
 
 | Command | Host | Rust target | Toolchain path |

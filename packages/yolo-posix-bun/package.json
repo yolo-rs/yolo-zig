@@ -1,6 +1,6 @@
 {
   "name": "@yolo-rs/posix-bun",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Integrated POSIX.1-2024 and GNU compatibility helpers for Bun",
   "repository": {
     "type": "git",

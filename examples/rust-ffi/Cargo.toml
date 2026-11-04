@@ -6,3 +6,4 @@ publish = false
 build = "build.rs"
 
 [dependencies]
+yolo-zig-ffi = { path = "../../crates/yolo-zig-ffi", features = ["link-yolo-zig"] }
